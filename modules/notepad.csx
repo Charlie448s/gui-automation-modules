@@ -1,40 +1,29 @@
 // C# Automation Script for Notepad
 // Process Name: notepad
 
-// The 'AppContext' global is passed in from the main program.
-Console.WriteLine("✅ Notepad Automation Module Loaded!");
-Console.WriteLine($"   - App Name: {AppContext.Name}");
-Console.WriteLine($"   - Process ID: {AppContext.ProcessId}");
+Console.WriteLine("✅ Notepad Module Initialized.");
 
-// Give a moment for the window to be fully focused.
-Thread.Sleep(500);
-
-try
+// The 'Action' global variable holds the command from the agent.
+// We use ?.ToLower() for safety and case-insensitivity.
+switch (Action?.ToLower())
 {
-    string message = "Hello from the GUI Automation Agent! This text was typed automatically.";
-    Console.WriteLine($"   - Automating: Typing a message...");
+    case "write_greeting":
+        Console.WriteLine("   - Executing action: write_greeting");
+        Thread.Sleep(200);
+        System.Windows.Forms.SendKeys.SendWait("Hello from an interactive module!");
+        System.Windows.Forms.SendKeys.SendWait("{ENTER}");
+        break;
 
-    // Simulate typing the message character by character.
-    System.Windows.Forms.SendKeys.SendWait(message);
-
-    // Add two new lines.
-    System.Windows.Forms.SendKeys.SendWait("{ENTER}{ENTER}");
-    Thread.Sleep(300);
-
-    Console.WriteLine($"   - Automating: Opening the 'Save As' dialog...");
-    // Simulate pressing Ctrl+S to open the "Save" or "Save As" dialog.
-    System.Windows.Forms.SendKeys.SendWait("^s"); 
-    Thread.Sleep(500);
-
-    Console.WriteLine($"   - Automating: Typing a default file name...");
-    System.Windows.Forms.SendKeys.SendWait("AutomatedFile.txt");
-    Thread.Sleep(300);
-
-    // The script stops here. You could extend it to press Enter to save.
-    // For now, we leave the "Save As" dialog open.
-    Console.WriteLine("   - Notepad automation task complete.");
-}
-catch (Exception e)
-{
-    Console.WriteLine($"   - Automation Error: {e.Message}");
+    case "save_as":
+        Console.WriteLine("   - Executing action: save_as");
+        Thread.Sleep(200);
+        System.Windows.Forms.SendKeys.SendWait("^s"); // Ctrl+S
+        Thread.Sleep(300);
+        System.Windows.Forms.SendKeys.SendWait("MyNewFile.txt");
+        break;
+        
+    default:
+        Console.WriteLine($"   - Unknown or missing action: '{Action}'");
+        Console.WriteLine("   - Available actions for Notepad: write_greeting, save_as");
+        break;
 }
