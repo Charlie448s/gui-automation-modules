@@ -2,27 +2,36 @@
 // Process Name: devenv
 
 Console.WriteLine("✅ Visual Studio Module Initialized.");
-Thread.Sleep(500); // Give VS time to react
 
+// Add a small delay to ensure VS is ready for input.
+Thread.Sleep(500); 
+
+// Use a switch statement to check the 'Action' variable passed from the agent.
 switch (Action?.ToLower())
 {
     case "show_solution_explorer":
         Console.WriteLine("   - Executing action: show_solution_explorer");
-        System.Windows.Forms.SendKeys.SendWait("^%l"); // Ctrl+Alt+L
+        // Shortcut: Ctrl+Alt+L
+        System.Windows.Forms.SendKeys.SendWait("^%l"); 
         break;
         
     case "show_error_list":
         Console.WriteLine("   - Executing action: show_error_list");
-        System.Windows.Forms.SendKeys.SendWait(@"^(\e)"); // Ctrl+\, E
+        // Shortcut: Ctrl+\ followed by E
+        System.Windows.Forms.SendKeys.SendWait(@"^(\e)"); 
         break;
         
     case "open_search":
         Console.WriteLine("   - Executing action: open_search");
-        System.Windows.Forms.SendKeys.SendWait("^t"); // Ctrl+T
+        // Shortcut: Ctrl+T
+        System.Windows.Forms.SendKeys.SendWait("^t");
         break;
 
+    // This is the default case if the action is unknown.
     default:
         Console.WriteLine($"   - Unknown or missing action: '{Action}'");
-        Console.WriteLine("   - Available actions for Visual Studio: show_solution_explorer, show_error_list, open_search");
+        Console.WriteLine("   - Available actions: show_solution_explorer, show_error_list, open_search");
         break;
 }
+
+Console.WriteLine("   - Action complete.");
