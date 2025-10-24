@@ -1,39 +1,28 @@
 // C# Automation Script for Visual Studio
 // Process Name: devenv
 
-Console.WriteLine("✅ Visual Studio Automation Module Loaded!");
-Console.WriteLine($"   - App Name: {AppContext.Name}");
-Console.WriteLine($"   - Process ID: {AppContext.ProcessId}");
+Console.WriteLine("✅ Visual Studio Module Initialized.");
+Thread.Sleep(500); // Give VS time to react
 
-// Allow time for Visual Studio to fully render and gain focus.
-Thread.Sleep(1000);
-
-try
+switch (Action?.ToLower())
 {
-    Console.WriteLine("   - Automating: Ensuring Solution Explorer is visible...");
-    // Simulate pressing Ctrl+Alt+L to toggle the Solution Explorer window.
-    // This is a reliable way to make sure it's open.
-    System.Windows.Forms.SendKeys.SendWait("^%l"); // ^ = Ctrl, % = Alt
-    Thread.Sleep(500);
+    case "show_solution_explorer":
+        Console.WriteLine("   - Executing action: show_solution_explorer");
+        System.Windows.Forms.SendKeys.SendWait("^%l"); // Ctrl+Alt+L
+        break;
+        
+    case "show_error_list":
+        Console.WriteLine("   - Executing action: show_error_list");
+        System.Windows.Forms.SendKeys.SendWait(@"^(\e)"); // Ctrl+\, E
+        break;
+        
+    case "open_search":
+        Console.WriteLine("   - Executing action: open_search");
+        System.Windows.Forms.SendKeys.SendWait("^t"); // Ctrl+T
+        break;
 
-    Console.WriteLine("   - Automating: Opening the Error List window...");
-    // The shortcut for Error List is Ctrl+\ followed by E.
-    // SendKeys handles sequences like this by enclosing the second part in parentheses.
-    System.Windows.Forms.SendKeys.SendWait(@"^(\e)");
-    Thread.Sleep(500);
-    
-    Console.WriteLine("   - Automating: Opening the 'Go To All' search bar...");
-    // Simulate pressing Ctrl+T to open the main search/navigation bar.
-    System.Windows.Forms.SendKeys.SendWait("^t");
-    Thread.Sleep(500);
-    
-    Console.WriteLine("   - Automating: Closing the search bar...");
-    // Press Escape to close the dialog/search bar.
-    System.Windows.Forms.SendKeys.SendWait("{ESC}");
-    
-    Console.WriteLine("   - Visual Studio automation task complete.");
-}
-catch (Exception e)
-{
-    Console.WriteLine($"   - Automation Error: {e.Message}");
+    default:
+        Console.WriteLine($"   - Unknown or missing action: '{Action}'");
+        Console.WriteLine("   - Available actions for Visual Studio: show_solution_explorer, show_error_list, open_search");
+        break;
 }
