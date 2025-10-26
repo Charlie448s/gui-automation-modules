@@ -1,36 +1,113 @@
-// This is an executable C# script for Visual Studio Code.
-// It will be run by the GuiAutomationAgent.
+// code.csx
+using System;
+using System.Threading;
+using System.Windows.Forms;
+using System.Windows.Automation;
 
-// The 'AppContext' global variable is passed in from the main program.
-// It contains information about the VS Code process and window.
+// Globals available:
+//   AppContext  -> ApplicationContext
+//   Action      -> string
 
-Console.WriteLine("✅ VS Code Automation Module Loaded!");
-Console.WriteLine($"   - App Name: {AppContext.Name}");
-Console.WriteLine($"   - Process ID: {AppContext.ProcessId}");
+if (AppContext == null) throw new Exception("AppContext is null inside module.");
+if (string.IsNullOrWhiteSpace(Action)) throw new Exception("No Action provided.");
 
-// --- Example Automation Logic ---
-// This example will open the command palette and search for the GitLens view.
+void FocusWindow()
+{
+    try
+    {
+        var hwnd = (IntPtr)AppContext.Window.Current.NativeWindowHandle;
+        if (hwnd != IntPtr.Zero)
+        {
+            // Bring to front (best-effort)
+            Win32.SetForegroundWindow(hwnd);
+            Thread.Sleep(200);
+        }
+    }
+    catch { /* best-effort */ }
+}
+
+void Send(string keys, int after = 150)
+{
+    SendKeys.SendWait(keys);
+    Thread.Sleep(after);
+}
+
+// Simple Win32 wrapper used only here
+static class Win32
+{
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+}
+
+// Parse action that could include ':' parameter (e.g., command_palette:Python: Create Environment)
+string actionName = Action;
+string actionParam = "";
+int colon = Action.IndexOf(':');
+if (colon >= 0)
+{
+    actionName = Action.Substring(0, colon).Trim();
+    actionParam = Action.Substring(colon + 1).Trim();
+}
+
+Console.WriteLine($"[code.csx] Action='{actionName}', Param='{actionParam}'");
+FocusWindow();
 
 try
 {
-    Console.WriteLine("   - Automating: Opening Command Palette...");
+    switch (actionName.ToLower())
+    {
+        case "open_terminal":
+            // Ctrl+` opens integrated terminal
+            Send("^`", 500);
+            break;
 
-    // Use SendKeys to simulate keyboard shortcuts.
-    // Make sure the window is focused before sending keys.
-    // Note: SendKeys can be unreliable. UIAutomation is a more robust alternative for complex tasks.
+        case "toggle_sidebar":
+            // Ctrl+B toggles sidebar
+            Send("^b", 250);
+            break;
 
-    System.Windows.Forms.SendKeys.SendWait("^+p"); // Ctrl+Shift+P
-    Thread.Sleep(500); // Wait for the palette to open
+        case "toggle_panel":
+            // Ctrl+J toggles panel
+            Send("^j", 250);
+            break;
 
-    Console.WriteLine("   - Automating: Typing 'View: Show GitLens'...");
-    System.Windows.Forms.SendKeys.SendWait("View: Show GitLens");
-    Thread.Sleep(500);
+        case "command_palette":
+            // open command palette then type param + enter
+            Send("^+p", 350);
+            if (!string.IsNullOrEmpty(actionParam))
+            {
+                Send(actionParam, 300);
+                Send("{ENTER}", 500);
+            }
+            break;
 
-    System.Windows.Forms.SendKeys.SendWait("{ENTER}"); // Press Enter
+        case "create_python_env":
+            // Try open command palette and run Python: Create Environment
+            Send("^+p", 400);
+            Send("Python: Create Environment", 500);
+            Send("{ENTER}", 500);
+            break;
 
-    Console.WriteLine("   - Automation task complete.");
+        case "open_file":
+            // actionParam expected to be relative/full path or filename
+            // Use File: Open... via command palette for reliability
+            Send("^+p", 350);
+            Send($"File: Open File...", 300);
+            Send("{ENTER}", 400);
+            Thread.Sleep(700);
+            if (!string.IsNullOrEmpty(actionParam))
+            {
+                Send(actionParam, 300);
+                Send("{ENTER}", 400);
+            }
+            break;
+
+        default:
+            Console.WriteLine($"[code.csx] Unknown action: {actionName}");
+            break;
+    }
 }
-catch (Exception e)
+catch (Exception ex)
 {
-    Console.WriteLine($"   - Automation Error: {e.Message}");
+    Console.WriteLine($"[code.csx] Error executing action: {ex.Message}");
 }
