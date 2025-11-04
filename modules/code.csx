@@ -163,83 +163,90 @@ try
             Console.WriteLine("   Extensions: Install, Git: Commit, Git: Push, Git: Pull, AI Chat: Open,");
             Console.WriteLine("   Run All Tests, Go to Definition, Go to Symbol in Workspace..., etc.");
             break;
-        case "python_venv":
-        case "venv":
-            {
-                if (string.IsNullOrEmpty(actionParam))
-                {
-                    Console.WriteLine("Usage: python_venv:create | python_venv:activate | python_venv:install <package>");
-                    break;
-                }
+        // ----------- Python Virtual Environment Management -----------
+case "python_venv":
+case "venv":
+{
+    if (string.IsNullOrEmpty(actionParam))
+    {
+        Console.WriteLine("Usage: python_venv:create | python_venv:activate | python_venv:install <package>");
+        break;
+    }
 
-                FocusWindowHard();
-                SendKeysWithDelay("^`", 400); // Open terminal
-                Thread.Sleep(500);
+    FocusWindowHard();
+    SendKeysWithDelay("^`", 400); // open terminal
+    Thread.Sleep(700);
+    SendKeysWithDelay("cls{ENTER}", 300); // ensure terminal focus
 
-                if (actionParam.StartsWith("create", StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine(" - Creating virtual environment (.venv)...");
-                    SendKeysWithDelay("python -m venv .venv{ENTER}", 1000);
-                }
-                else if (actionParam.StartsWith("activate", StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine(" - Activating virtual environment...");
-                    SendKeysWithDelay(".venv\\Scripts\\activate{ENTER}", 800);
-                }
-                else if (actionParam.StartsWith("install", StringComparison.OrdinalIgnoreCase))
-                {
-                    string[] parts = actionParam.Split(' ');
-                    if (parts.Length < 2)
-                    {
-                        Console.WriteLine("Please specify a package to install.");
-                        break;
-                    }
-
-                    string pkg = parts[1];
-                    Console.WriteLine($" - Installing package: {pkg}");
-                    SendKeysWithDelay($"pip install {pkg}{{ENTER}}", 1000);
-                }
-                else
-                {
-                    Console.WriteLine($"Unknown virtual environment command: {actionParam}");
-                }
-            }
+    if (actionParam.StartsWith("create", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine(" - Creating virtual environment (.venv)...");
+        SendKeysWithDelay("python -m venv .venv{ENTER}", 1000);
+    }
+    else if (actionParam.StartsWith("activate", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine(" - Activating virtual environment...");
+        SendKeysWithDelay(".venv\\Scripts\\activate{ENTER}", 800);
+    }
+    else if (actionParam.StartsWith("install", StringComparison.OrdinalIgnoreCase))
+    {
+        string[] parts = actionParam.Split(' ');
+        if (parts.Length < 2)
+        {
+            Console.WriteLine("Please specify a package to install.");
             break;
+        }
 
-        // ----------- Duplicate Current File -----------
-        case "duplicate_file":
-            try
-            {
-                FocusWindowHard();
-                Console.WriteLine(" - Attempting to duplicate current file...");
+        string pkg = parts[1];
+        Console.WriteLine($" - Installing package: {pkg}");
+        SendKeysWithDelay($"pip install {pkg}{{ENTER}}", 1000);
+    }
+    else
+    {
+        Console.WriteLine($"Unknown virtual environment command: {actionParam}");
+    }
+}
+break;
 
-                // Open Command Palette and get full path of current file
-                SendKeysWithDelay("^+p", 500);
-                SendKeysWithDelay("Copy Path of Active File{ENTER}", 700);
-                Thread.Sleep(600);
+// ----------- Duplicate Current File -----------
+case "duplicate_file":
+try
+{
+    FocusWindowHard();
+    Console.WriteLine(" - Attempting to duplicate current file...");
 
-                // Clipboard read attempt
-                string? filePath = Clipboard.GetText();
-                if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
-                {
-                    Console.WriteLine(" - Could not retrieve current file path from clipboard.");
-                    break;
-                }
+    SendKeysWithDelay("^+p", 600);
+    Thread.Sleep(600);
+    SendKeysWithDelay("File: Copy Path of Active File{ENTER}", 800);
+    Thread.Sleep(1000); // wait for clipboard
 
-                string dir = Path.GetDirectoryName(filePath)!;
-                string name = Path.GetFileNameWithoutExtension(filePath);
-                string ext = Path.GetExtension(filePath);
+    string? filePath = null;
+    for (int i = 0; i < 5; i++)
+    {
+        filePath = Clipboard.GetText();
+        if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) break;
+        Thread.Sleep(300);
+    }
 
-                string dupFilePath = Path.Combine(dir, $"{name}(dup){ext}");
-                File.Copy(filePath, dupFilePath, overwrite: false);
+    if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+    {
+        Console.WriteLine(" - Could not retrieve current file path from clipboard.");
+        break;
+    }
 
-                Console.WriteLine($" - File duplicated: {dupFilePath}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[vscode.csx] Error duplicating file: {ex.Message}");
-            }
-            break;
+    string dir = Path.GetDirectoryName(filePath)!;
+    string name = Path.GetFileNameWithoutExtension(filePath);
+    string ext = Path.GetExtension(filePath);
+    string dupFilePath = Path.Combine(dir, $"{name}(dup){ext}");
+
+    File.Copy(filePath, dupFilePath, overwrite: false);
+    Console.WriteLine($" - File duplicated: {dupFilePath}");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[vscode.csx] Error duplicating file: {ex.Message}");
+}
+break;
 
         default:
             Console.WriteLine($"[vscode.csx] Unknown action: {actionName}");
