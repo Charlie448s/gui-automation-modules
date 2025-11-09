@@ -2,7 +2,7 @@
 // Robust Visual Studio Code automation module with comprehensive error handling
 // Enhanced with retry mechanisms, validation, and cross-platform support
 // Compatible with ModuleManager.cs
-// Version 5
+// Version 5 7
 
 using System;
 using System.IO;
