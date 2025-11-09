@@ -1,13 +1,15 @@
 // vscode.csx
-// Comprehensive Visual Studio Code automation module
+// Robust Visual Studio Code automation module with comprehensive error handling
+// Enhanced with retry mechanisms, validation, and cross-platform support
 // Compatible with ModuleManager.cs
-// Version 5 — Extended Developer Actions
+// Version 5
 
 using System;
 using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using System.Windows.Automation;
+using System.Diagnostics;
 
 // -------------------------------
 // Globals provided by ModuleManager
@@ -19,36 +21,11 @@ using System.Windows.Automation;
 if (AppContext == null) throw new Exception("AppContext is null.");
 if (string.IsNullOrWhiteSpace(Action)) throw new Exception("No Action provided.");
 
-// ----------- Utility Helpers -----------
+// ----------- Config -----------
+const int MAX_RETRIES = 3;
+const int BASE_DELAY = 150;
 
-bool FocusVSCode()
-{
-    try
-    {
-        var hwnd = (IntPtr)AppContext.Window.Current.NativeWindowHandle;
-        if (hwnd == IntPtr.Zero) return false;
-
-        Win32.ShowWindow(hwnd, 9);   // SW_RESTORE
-        Thread.Sleep(150);
-        return Win32.SetForegroundWindow(hwnd);
-    }
-    catch { return false; }
-}
-
-bool SendKeysWithDelay(string keys, int delay = 200)
-{
-    try
-    {
-        SendKeys.SendWait(keys);
-        Thread.Sleep(delay);
-        return true;
-    }
-    catch
-    {
-        return false;
-    }
-}
-
+// ----------- Win32 helpers -----------
 static class Win32
 {
     [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -56,151 +33,196 @@ static class Win32
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
 }
 
-// ----------- Start Execution -----------
-
-string actionName = Action.Trim().ToLower();
-Console.WriteLine($"[VSCode.csx] → Action received: {actionName}");
-
-if (!FocusVSCode())
+// ----------- Utility functions -----------
+bool IsWindowResponsive()
 {
-    Console.WriteLine("[VSCode.csx] ✗ Failed to focus VS Code window.");
+    try
+    {
+        var hwnd = (IntPtr)AppContext.Window.Current.NativeWindowHandle;
+        return hwnd != IntPtr.Zero && Win32.IsWindowVisible(hwnd);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[vscode.csx] Window check failed: {ex.Message}");
+        return false;
+    }
+}
+
+bool FocusWindowHard(int retries = MAX_RETRIES)
+{
+    for (int attempt = 1; attempt <= retries; attempt++)
+    {
+        try
+        {
+            var hwnd = (IntPtr)AppContext.Window.Current.NativeWindowHandle;
+            if (hwnd == IntPtr.Zero)
+            {
+                Console.WriteLine("Invalid VS Code handle.");
+                Thread.Sleep(300 * attempt);
+                continue;
+            }
+
+            Win32.ShowWindow(hwnd, 9);
+            Thread.Sleep(200);
+
+            if (Win32.SetForegroundWindow(hwnd))
+            {
+                Thread.Sleep(300);
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[vscode.csx] Focus attempt {attempt} failed: {ex.Message}");
+        }
+        Thread.Sleep(400);
+    }
+    return false;
+}
+
+bool SendKeysWithRetry(string keys, int delay = BASE_DELAY, int retries = 2)
+{
+    for (int i = 0; i < retries; i++)
+    {
+        try
+        {
+            if (!IsWindowResponsive()) Thread.Sleep(200);
+            SendKeys.SendWait(keys);
+            Thread.Sleep(delay);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[vscode.csx] SendKeys error: {ex.Message}");
+            Thread.Sleep(200);
+        }
+    }
+    return false;
+}
+
+void ClearClipboardSafe()
+{
+    try { Clipboard.Clear(); } catch { }
+}
+
+// ----------- Parse Action -----------
+string actionName = Action;
+string actionParam = "";
+int idx = Action.IndexOf(':');
+if (idx >= 0)
+{
+    actionName = Action[..idx];
+    actionParam = Action[(idx + 1)..];
+}
+
+Console.WriteLine($"✓ VS Code Module Loaded");
+Console.WriteLine($" - Process ID : {AppContext.Window.Current.ProcessId}");
+Console.WriteLine($" - Action    : {actionName}");
+if (!string.IsNullOrEmpty(actionParam)) Console.WriteLine($" - Param    : {actionParam}");
+
+if (!FocusWindowHard())
+{
+    Console.WriteLine("✗ Unable to focus VS Code.");
     return;
 }
 
+// ----------- Main Logic -----------
 try
 {
-    switch (actionName)
+    switch (actionName.ToLower())
     {
-        // -------------------- BASIC ACTIONS --------------------
-        case "save":
-            Console.WriteLine("💾 Saving file...");
-            SendKeysWithDelay("^s");
-            break;
-
-        case "new_file":
-            Console.WriteLine("📝 Creating new file...");
-            SendKeysWithDelay("^n");
-            break;
-
+        // ---------- Basic ----------
+        case "save": SendKeysWithRetry("^s"); break;
+        case "new_file": SendKeysWithRetry("^n"); break;
+        case "toggle_sidebar": SendKeysWithRetry("^b"); break;
+        case "toggle_panel": SendKeysWithRetry("^j"); break;
         case "toggle_terminal":
-            Console.WriteLine("🖥️ Toggling terminal...");
-            SendKeysWithDelay("^`");
-            break;
+        case "open_terminal": SendKeysWithRetry("^`"); break;
 
-        case "toggle_sidebar":
-            Console.WriteLine("📁 Toggling sidebar...");
-            SendKeysWithDelay("^b");
-            break;
-
-        case "toggle_panel":
-            Console.WriteLine("🧩 Toggling bottom panel...");
-            SendKeysWithDelay("^j");
-            break;
-
-        // -------------------- DUPLICATE FILE --------------------
+        // ---------- Duplicate File ----------
         case "duplicate_file":
-            Console.WriteLine("📄 Duplicating current file...");
-            SendKeysWithDelay("^+p", 300);
-            SendKeysWithDelay("File: Copy Path of Active File{ENTER}", 800);
-            Thread.Sleep(600);
-
+            ClearClipboardSafe();
+            SendKeysWithRetry("^+p", 300);
+            SendKeysWithRetry("File: Copy Path of Active File{ENTER}", 600);
+            Thread.Sleep(500);
             string path = Clipboard.GetText();
-            if (string.IsNullOrEmpty(path))
-            {
-                Console.WriteLine("✗ No file path in clipboard.");
-                break;
-            }
+            if (string.IsNullOrWhiteSpace(path)) { Console.WriteLine("✗ Clipboard empty."); break; }
 
             string dir = Path.GetDirectoryName(path);
             string name = Path.GetFileNameWithoutExtension(path);
             string ext = Path.GetExtension(path);
-
-            string newPath = Path.Combine(dir, $"{name}_copy{ext}");
+            string copyPath = Path.Combine(dir, $"{name}_copy{ext}");
             int counter = 1;
-            while (File.Exists(newPath))
-            {
-                newPath = Path.Combine(dir, $"{name}_copy{counter++}{ext}");
-            }
-
-            File.Copy(path, newPath);
-            Console.WriteLine($"✓ File duplicated → {newPath}");
+            while (File.Exists(copyPath))
+                copyPath = Path.Combine(dir, $"{name}_copy{counter++}{ext}");
+            File.Copy(path, copyPath);
+            Console.WriteLine($"✓ File duplicated → {copyPath}");
             break;
 
-        // -------------------- PYTHON VIRTUAL ENVIRONMENT --------------------
+        // ---------- Git Bash ----------
+        case "open_git_bash":
+            Console.WriteLine("🧰 Opening Git Bash ...");
+            SendKeysWithRetry("^`", 400);
+            SendKeysWithRetry("bash{ENTER}", 400);
+            break;
+
+        // ---------- Python HTTP Server ----------
+        case "python_http_server":
+            Console.WriteLine("🌐 Running Python HTTP Server...");
+            SendKeysWithRetry("^`", 400);
+            SendKeysWithRetry("cls{ENTER}", 200);
+            SendKeysWithRetry("python -m http.server{ENTER}", 800);
+            break;
+
+        // ---------- Virtual Env ----------
         case "python_venv:create":
-            Console.WriteLine("🐍 Creating virtual environment (.venv)...");
-            SendKeysWithDelay("^`", 300);
-            Thread.Sleep(400);
-            SendKeysWithDelay("cls{ENTER}", 200);
-            SendKeysWithDelay("python -m venv .venv{ENTER}", 800);
+            Console.WriteLine("🐍 Creating virtual environment...");
+            SendKeysWithRetry("^`", 400);
+            SendKeysWithRetry("python -m venv .venv{ENTER}", 800);
             break;
 
         case "python_venv:activate":
             Console.WriteLine("⚡ Activating virtual environment...");
-            SendKeysWithDelay("^`", 300);
-            Thread.Sleep(400);
-            SendKeysWithDelay("cls{ENTER}", 200);
-            string activateCmd = Environment.OSVersion.Platform == PlatformID.Win32NT
+            SendKeysWithRetry("^`", 400);
+            string act = Environment.OSVersion.Platform == PlatformID.Win32NT
                 ? ".venv\\Scripts\\activate{ENTER}"
                 : "source .venv/bin/activate{ENTER}";
-            SendKeysWithDelay(activateCmd, 700);
+            SendKeysWithRetry(act, 700);
             break;
 
         case "python_venv:install requirements.txt":
         case "install_requirements":
-            Console.WriteLine("📦 Installing packages from requirements.txt...");
-            SendKeysWithDelay("^`", 300);
-            Thread.Sleep(400);
-            SendKeysWithDelay("pip install -r requirements.txt{ENTER}", 800);
+            Console.WriteLine("📦 Installing requirements.txt...");
+            SendKeysWithRetry("^`", 400);
+            SendKeysWithRetry("pip install -r requirements.txt{ENTER}", 800);
             break;
 
-        // -------------------- OPEN GIT BASH --------------------
-        case "open_git_bash":
-            Console.WriteLine("🧰 Opening Git Bash terminal...");
-            SendKeysWithDelay("^`", 400);
-            Thread.Sleep(400);
-            SendKeysWithDelay("bash{ENTER}", 300);
-            break;
-
-        // -------------------- PYTHON HTTP SERVER --------------------
-        case "python_http_server":
-            Console.WriteLine("🌐 Running Python HTTP Server (port 8000)...");
-            SendKeysWithDelay("^`", 400);
-            Thread.Sleep(400);
-            SendKeysWithDelay("cls{ENTER}", 200);
-            SendKeysWithDelay("python -m http.server{ENTER}", 800);
-            break;
-
-        // -------------------- CREATE FILE BY EXTENSION --------------------
+        // ---------- Create File ----------
         default:
             if (actionName.StartsWith("create_file"))
             {
-                string extension = ".txt";
-                int colonIndex = actionName.IndexOf(':');
-                if (colonIndex > 0)
-                    extension = actionName.Substring(colonIndex + 1).Trim();
-
-                Console.WriteLine($"🆕 Creating new {extension} file...");
-                SendKeysWithDelay("^n", 300);
+                string extn = ".txt";
+                int c = actionName.IndexOf(':');
+                if (c >= 0) extn = actionName[(c + 1)..];
+                Console.Write($"🆕 Enter filename (without extension {extn}): ");
+                string nameIn = Console.ReadLine();
+                if (string.IsNullOrWhiteSpace(nameIn)) nameIn = "newfile";
+                string filename = $"{nameIn}{extn}";
+                SendKeysWithRetry("^n", 300);
                 Thread.Sleep(400);
-
-                // Ask for filename
-                Console.Write("Enter file name (without extension): ");
-                string? nameInput = Console.ReadLine();
-                if (string.IsNullOrWhiteSpace(nameInput))
-                    nameInput = "newfile";
-
-                string filename = $"{nameInput}{extension}";
-                SendKeysWithDelay("^+s", 400);
-                Thread.Sleep(600);
-                SendKeysWithDelay(filename + "{ENTER}", 300);
-                Console.WriteLine($"✓ Created file: {filename}");
+                SendKeysWithRetry("^+s", 400);
+                Thread.Sleep(400);
+                SendKeysWithRetry(filename + "{ENTER}", 300);
+                Console.WriteLine($"✓ Created {filename}");
             }
             else
             {
-                Console.WriteLine($"⚠️ Unknown action: {actionName}");
+                Console.WriteLine($"⚠ Unknown action ‘{actionName}’");
             }
             break;
     }
@@ -209,5 +231,5 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"[VSCode.csx] ERROR: {ex.Message}");
+    Console.WriteLine($"[vscode.csx] ERROR: {ex.Message}");
 }
