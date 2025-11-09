@@ -1,9 +1,13 @@
+// vscode.csx
+// Comprehensive Visual Studio Code automation module
+// Compatible with ModuleManager.cs
+// Version 5 — Extended Developer Actions
+
 using System;
 using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using System.Windows.Automation;
-using System.Diagnostics;
 
 // -------------------------------
 // Globals provided by ModuleManager
@@ -15,62 +19,23 @@ using System.Diagnostics;
 if (AppContext == null) throw new Exception("AppContext is null.");
 if (string.IsNullOrWhiteSpace(Action)) throw new Exception("No Action provided.");
 
-const int MAX_RETRIES = 3;
-const int BASE_DELAY = 150;
+// ----------- Utility Helpers -----------
 
-static class Win32
-{
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    public static extern bool IsWindowVisible(IntPtr hWnd);
-}
-
-bool IsWindowResponsive()
+bool FocusVSCode()
 {
     try
     {
         var hwnd = (IntPtr)AppContext.Window.Current.NativeWindowHandle;
-        return hwnd != IntPtr.Zero && Win32.IsWindowVisible(hwnd);
+        if (hwnd == IntPtr.Zero) return false;
+
+        Win32.ShowWindow(hwnd, 9);   // SW_RESTORE
+        Thread.Sleep(150);
+        return Win32.SetForegroundWindow(hwnd);
     }
     catch { return false; }
 }
 
-bool FocusWindowHard(int retries = MAX_RETRIES)
-{
-    for (int i = 1; i <= retries; i++)
-    {
-        try
-        {
-            var hwnd = (IntPtr)AppContext.Window.Current.NativeWindowHandle;
-            if (hwnd == IntPtr.Zero)
-            {
-                Thread.Sleep(400);
-                continue;
-            }
-
-            Win32.ShowWindow(hwnd, 9); // SW_RESTORE
-            Thread.Sleep(200);
-
-            if (Win32.SetForegroundWindow(hwnd))
-            {
-                Thread.Sleep(350);
-                Console.WriteLine("[vscode.csx] Window focused successfully");
-                return true;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[vscode.csx] Focus error: {ex.Message}");
-        }
-        Thread.Sleep(400);
-    }
-    return false;
-}
-
-bool SendKeysWithRetry(string keys, int delay = BASE_DELAY)
+bool SendKeysWithDelay(string keys, int delay = 200)
 {
     try
     {
@@ -78,126 +43,171 @@ bool SendKeysWithRetry(string keys, int delay = BASE_DELAY)
         Thread.Sleep(delay);
         return true;
     }
-    catch (Exception ex)
+    catch
     {
-        Console.WriteLine($"[vscode.csx] SendKeys error: {ex.Message}");
         return false;
     }
 }
 
-Console.WriteLine("✓ VS Code Automation Module Loaded!");
-Console.WriteLine($" - App Name : vscode");
-Console.WriteLine($" - Process  : {AppContext.Window.Current.ProcessId}");
-Console.WriteLine($" - Action   : {Action}");
-
-if (!FocusWindowHard())
+static class Win32
 {
-    Console.WriteLine("[vscode.csx] ERROR: Failed to focus VS Code window. Aborting.");
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+
+// ----------- Start Execution -----------
+
+string actionName = Action.Trim().ToLower();
+Console.WriteLine($"[VSCode.csx] → Action received: {actionName}");
+
+if (!FocusVSCode())
+{
+    Console.WriteLine("[VSCode.csx] ✗ Failed to focus VS Code window.");
     return;
 }
 
 try
 {
-    string actionName = Action.ToLower().Trim();
-
     switch (actionName)
     {
-        case "toggle_sidebar":
-            Console.WriteLine(" - Toggling sidebar...");
-            SendKeysWithRetry("^b", 200);
-            Console.WriteLine(" - Sidebar toggled");
-            break;
-
-        case "toggle_terminal":
-            Console.WriteLine(" - Opening integrated terminal...");
-            SendKeysWithRetry("^`", 200);
-            Console.WriteLine(" - Terminal opened");
+        // -------------------- BASIC ACTIONS --------------------
+        case "save":
+            Console.WriteLine("💾 Saving file...");
+            SendKeysWithDelay("^s");
             break;
 
         case "new_file":
-            Console.WriteLine(" - Creating new file...");
-            SendKeysWithRetry("^n", 200);
-            Console.WriteLine(" - New file created");
+            Console.WriteLine("📝 Creating new file...");
+            SendKeysWithDelay("^n");
             break;
 
-        case "save":
-            Console.WriteLine(" - Saving file...");
-            SendKeysWithRetry("^s", 200);
-            Console.WriteLine(" - File saved");
+        case "toggle_terminal":
+            Console.WriteLine("🖥️ Toggling terminal...");
+            SendKeysWithDelay("^`");
             break;
 
-        case "create_virtual_environment": // ✅ NEW direct action
-        case "python_venv:create":          // ✅ NEW alias
-        case "venv:create":
-            try
+        case "toggle_sidebar":
+            Console.WriteLine("📁 Toggling sidebar...");
+            SendKeysWithDelay("^b");
+            break;
+
+        case "toggle_panel":
+            Console.WriteLine("🧩 Toggling bottom panel...");
+            SendKeysWithDelay("^j");
+            break;
+
+        // -------------------- DUPLICATE FILE --------------------
+        case "duplicate_file":
+            Console.WriteLine("📄 Duplicating current file...");
+            SendKeysWithDelay("^+p", 300);
+            SendKeysWithDelay("File: Copy Path of Active File{ENTER}", 800);
+            Thread.Sleep(600);
+
+            string path = Clipboard.GetText();
+            if (string.IsNullOrEmpty(path))
             {
-                Console.WriteLine(" - Initiating Python virtual environment creation...");
-                FocusWindowHard();
-                SendKeysWithRetry("^`", 300);
-                Thread.Sleep(800);
-
-                // Clear old terminal text
-                SendKeysWithRetry("cls{ENTER}", 300);
-
-                // Execute python venv command
-                string createCmd = "python -m venv .venv{ENTER}";
-                SendKeysWithRetry(createCmd, 800);
-
-                Console.WriteLine(" - Waiting for environment creation to finish...");
-                Thread.Sleep(4000); // allow process to run
-
-                string projectDir = Directory.GetCurrentDirectory();
-                string venvPath = Path.Combine(projectDir, ".venv");
-
-                if (Directory.Exists(venvPath) && Directory.Exists(Path.Combine(venvPath, "Scripts")))
-                {
-                    Console.WriteLine($" - ✓ Virtual environment successfully created at: {venvPath}");
-                }
-                else
-                {
-                    Console.WriteLine(" - ✗ Failed to verify .venv creation. Check if Python is installed and accessible.");
-                }
+                Console.WriteLine("✗ No file path in clipboard.");
+                break;
             }
-            catch (Exception ex)
+
+            string dir = Path.GetDirectoryName(path);
+            string name = Path.GetFileNameWithoutExtension(path);
+            string ext = Path.GetExtension(path);
+
+            string newPath = Path.Combine(dir, $"{name}_copy{ext}");
+            int counter = 1;
+            while (File.Exists(newPath))
             {
-                Console.WriteLine($"[vscode.csx] Virtual environment creation failed: {ex.Message}");
+                newPath = Path.Combine(dir, $"{name}_copy{counter++}{ext}");
             }
+
+            File.Copy(path, newPath);
+            Console.WriteLine($"✓ File duplicated → {newPath}");
             break;
 
-        case "activate_virtual_environment": // ✅ NEW action for activation
+        // -------------------- PYTHON VIRTUAL ENVIRONMENT --------------------
+        case "python_venv:create":
+            Console.WriteLine("🐍 Creating virtual environment (.venv)...");
+            SendKeysWithDelay("^`", 300);
+            Thread.Sleep(400);
+            SendKeysWithDelay("cls{ENTER}", 200);
+            SendKeysWithDelay("python -m venv .venv{ENTER}", 800);
+            break;
+
         case "python_venv:activate":
-        case "venv:activate":
-            try
-            {
-                Console.WriteLine(" - Activating Python virtual environment...");
-                FocusWindowHard();
-                SendKeysWithRetry("^`", 300);
-                Thread.Sleep(600);
-
-                string activateCmd = Environment.OSVersion.Platform == PlatformID.Win32NT
-                    ? ".venv\\Scripts\\activate{ENTER}"
-                    : "source .venv/bin/activate{ENTER}";
-                SendKeysWithRetry(activateCmd, 800);
-
-                Thread.Sleep(1000);
-                Console.WriteLine(" - ✓ Virtual environment activation command sent.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[vscode.csx] Activation error: {ex.Message}");
-            }
+            Console.WriteLine("⚡ Activating virtual environment...");
+            SendKeysWithDelay("^`", 300);
+            Thread.Sleep(400);
+            SendKeysWithDelay("cls{ENTER}", 200);
+            string activateCmd = Environment.OSVersion.Platform == PlatformID.Win32NT
+                ? ".venv\\Scripts\\activate{ENTER}"
+                : "source .venv/bin/activate{ENTER}";
+            SendKeysWithDelay(activateCmd, 700);
             break;
 
+        case "python_venv:install requirements.txt":
+        case "install_requirements":
+            Console.WriteLine("📦 Installing packages from requirements.txt...");
+            SendKeysWithDelay("^`", 300);
+            Thread.Sleep(400);
+            SendKeysWithDelay("pip install -r requirements.txt{ENTER}", 800);
+            break;
+
+        // -------------------- OPEN GIT BASH --------------------
+        case "open_git_bash":
+            Console.WriteLine("🧰 Opening Git Bash terminal...");
+            SendKeysWithDelay("^`", 400);
+            Thread.Sleep(400);
+            SendKeysWithDelay("bash{ENTER}", 300);
+            break;
+
+        // -------------------- PYTHON HTTP SERVER --------------------
+        case "python_http_server":
+            Console.WriteLine("🌐 Running Python HTTP Server (port 8000)...");
+            SendKeysWithDelay("^`", 400);
+            Thread.Sleep(400);
+            SendKeysWithDelay("cls{ENTER}", 200);
+            SendKeysWithDelay("python -m http.server{ENTER}", 800);
+            break;
+
+        // -------------------- CREATE FILE BY EXTENSION --------------------
         default:
-            Console.WriteLine($"[vscode.csx] ERROR: Unknown action '{actionName}'");
-            Console.WriteLine(" - Available actions: toggle_sidebar, toggle_terminal, new_file, save, create_virtual_environment, activate_virtual_environment");
+            if (actionName.StartsWith("create_file"))
+            {
+                string extension = ".txt";
+                int colonIndex = actionName.IndexOf(':');
+                if (colonIndex > 0)
+                    extension = actionName.Substring(colonIndex + 1).Trim();
+
+                Console.WriteLine($"🆕 Creating new {extension} file...");
+                SendKeysWithDelay("^n", 300);
+                Thread.Sleep(400);
+
+                // Ask for filename
+                Console.Write("Enter file name (without extension): ");
+                string? nameInput = Console.ReadLine();
+                if (string.IsNullOrWhiteSpace(nameInput))
+                    nameInput = "newfile";
+
+                string filename = $"{nameInput}{extension}";
+                SendKeysWithDelay("^+s", 400);
+                Thread.Sleep(600);
+                SendKeysWithDelay(filename + "{ENTER}", 300);
+                Console.WriteLine($"✓ Created file: {filename}");
+            }
+            else
+            {
+                Console.WriteLine($"⚠️ Unknown action: {actionName}");
+            }
             break;
     }
 
-    Console.WriteLine(" - Automation task complete.");
+    Console.WriteLine("✅ VS Code automation completed.");
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"[vscode.csx] CRITICAL ERROR executing action: {ex.Message}");
-    Console.WriteLine($"   Stack trace: {ex.StackTrace}");
+    Console.WriteLine($"[VSCode.csx] ERROR: {ex.Message}");
 }
