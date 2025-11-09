@@ -1,177 +1,79 @@
-// Blender.csx — Robust Blender automation module
-// Version 1
-// Compatible with ModuleManager.cs
-// Purpose: Initialize Blender setup and automate common UI tasks
-
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
-using System.Diagnostics;
 using System.Windows.Forms;
-using System.Windows.Automation;
-
-// -------------------------------
-// Globals provided by ModuleManager
-// -------------------------------
-//   AppContext  -> ApplicationContext
-//   Action      -> string
-// -------------------------------
 
 if (AppContext == null) throw new Exception("AppContext is null.");
 if (string.IsNullOrWhiteSpace(Action)) throw new Exception("No Action provided.");
 
-const int MAX_RETRIES = 3;
-const int BASE_DELAY = 200;
-
-// ----------------- Win32 Helpers -----------------
-static class Win32
-{
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-}
-
-// ----------------- Utility Functions -----------------
-bool FocusWindow()
-{
-    try
-    {
-        var hwnd = (IntPtr)AppContext.Window.Current.NativeWindowHandle;
-        if (hwnd == IntPtr.Zero) return false;
-
-        Win32.ShowWindow(hwnd, 9); // SW_RESTORE
-        Thread.Sleep(300);
-        Win32.SetForegroundWindow(hwnd);
-        Thread.Sleep(300);
-        return true;
-    }
-    catch { return false; }
-}
-
-bool SendKeysSafe(string keys, int delay = BASE_DELAY)
-{
-    try
-    {
-        SendKeys.SendWait(keys);
-        Thread.Sleep(delay);
-        return true;
-    }
-    catch { return false; }
-}
-
-// ----------------- Action Parsing -----------------
-string actionName = Action;
-string actionParam = string.Empty;
-int colon = Action.IndexOf(':');
-if (colon >= 0)
-{
-    actionName = Action.Substring(0, colon).Trim();
-    actionParam = Action.Substring(colon + 1).Trim();
-}
-
 Console.WriteLine("✓ Blender Automation Module Loaded!");
-Console.WriteLine($" - Process: {AppContext.Window.Current.ProcessId}");
-Console.WriteLine($" - Action : {actionName}");
+Console.WriteLine($" - Process ID: {AppContext.Window.Current.ProcessId}");
+Console.WriteLine($" - Action: {Action}");
 
-if (!FocusWindow())
-{
-    Console.WriteLine(" - ERROR: Could not focus Blender window.");
-    return;
-}
+string blenderPath = @"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"; // adjust as needed
+string tempScriptPath = Path.Combine(Path.GetTempPath(), "blender_auto.py");
 
-// ----------------- Main Automation Logic -----------------
+string scriptContent = @"
+import bpy
+
+print('--- Blender Automation Initialized ---')
+
+# 1️⃣ Reset to General startup
+bpy.ops.wm.read_homefile(app_template='')  # loads General template
+
+# 2️⃣ Ensure right-click select is enabled
+prefs = bpy.context.preferences
+prefs.input.select_mouse = 'RIGHT'
+prefs.view.use_zoom_to_mouse = True
+
+# 3️⃣ Enable useful overlays and tools
+area = next(a for a in bpy.context.screen.areas if a.type == 'VIEW_3D')
+space = next(s for s in area.spaces if s.type == 'VIEW_3D')
+space.overlay.show_cursor = True
+space.overlay.show_stats = True
+space.overlay.show_object_origins = True
+space.shading.show_xray = True
+space.shading.type = 'SOLID'
+
+# 4️⃣ Create base layout: Cube, Plane, and Camera properly positioned
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete(use_global=False)
+
+bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 1, 1))
+bpy.ops.mesh.primitive_plane_add(size=10, location=(0, 0, 0))
+bpy.ops.object.camera_add(location=(6, -6, 5), rotation=(1.1, 0, 0.78))
+bpy.ops.object.light_add(type='SUN', radius=1, location=(4, -4, 6))
+
+# 5️⃣ Enable screencast keys (if installed)
+try:
+    bpy.ops.preferences.addon_enable(module='space_view3d_screencast_keys')
+except Exception:
+    print('Screencast keys not available.')
+
+# 6️⃣ Save setup
+bpy.ops.wm.save_mainfile(filepath=bpy.path.abspath('//auto_init.blend'))
+
+print('--- Blender Automation Complete ---')
+";
+
+File.WriteAllText(tempScriptPath, scriptContent);
+
 try
 {
-    switch (actionName.ToLower())
-    {
-        // --- INITIALIZATION FEATURE ---
-        case "init":
-        case "initialize":
-            Console.WriteLine(" - Initializing Blender startup setup...");
-            Console.WriteLine(" - Choosing 'General' preset...");
-            SendKeysSafe("{ENTER}", 600); // confirm General
+    Console.WriteLine(" - Launching Blender with automation script...");
+    var process = new Process();
+    process.StartInfo.FileName = blenderPath;
+    process.StartInfo.Arguments = $"--python \"{tempScriptPath}\"";
+    process.StartInfo.UseShellExecute = false;
+    process.StartInfo.CreateNoWindow = false;
+    process.Start();
 
-            Thread.Sleep(1000);
-            Console.WriteLine(" - Setting right-click as select...");
-            SendKeysSafe("^,"); // open Preferences
-            Thread.Sleep(600);
-            SendKeysSafe("select with right{ENTER}");
-            Thread.Sleep(600);
-            SendKeysSafe("%{F4}"); // close preferences
-            Console.WriteLine(" - Setup complete (General + Right Click Select)");
-            break;
-
-        // --- COMMON UI ACTIONS ---
-        case "toggle_overlay":
-            Console.WriteLine(" - Toggling Overlays (Viewport)... (Shift + Alt + Z)");
-            SendKeysSafe("+%z", 200);
-            break;
-
-        case "toggle_gizmo":
-            Console.WriteLine(" - Toggling Gizmo visibility...");
-            SendKeysSafe("^`", 200);
-            break;
-
-        case "open_preferences":
-            Console.WriteLine(" - Opening Preferences window...");
-            SendKeysSafe("^,", 200);
-            break;
-
-        case "save_project":
-            Console.WriteLine(" - Saving Blender project...");
-            SendKeysSafe("^s", 300);
-            break;
-
-        case "render_image":
-            Console.WriteLine(" - Rendering current frame (F12)...");
-            SendKeysSafe("{F12}", 300);
-            break;
-
-        case "render_animation":
-            Console.WriteLine(" - Rendering full animation (Ctrl + F12)...");
-            SendKeysSafe("^({F12})", 300);
-            break;
-
-        case "quick_material":
-            Console.WriteLine(" - Applying basic material setup...");
-            SendKeysSafe("n", 300); // open sidebar
-            Thread.Sleep(300);
-            SendKeysSafe("{TAB}", 300); // switch to edit mode
-            Thread.Sleep(300);
-            SendKeysSafe("a", 200); // select all
-            SendKeysSafe("u", 200); // unwrap UV
-            Thread.Sleep(300);
-            SendKeysSafe("shift+a", 200);
-            SendKeysSafe("material{ENTER}", 400);
-            break;
-
-        case "quick_light":
-            Console.WriteLine(" - Adding light to scene...");
-            SendKeysSafe("shift+a", 300);
-            SendKeysSafe("light{ENTER}", 300);
-            SendKeysSafe("{DOWN}{DOWN}{ENTER}", 300);
-            break;
-
-        case "quick_camera":
-            Console.WriteLine(" - Adding camera to scene...");
-            SendKeysSafe("shift+a", 300);
-            SendKeysSafe("camera{ENTER}", 300);
-            break;
-
-        case "list_ui":
-            Console.WriteLine(" - Common Blender UI automation targets:");
-            Console.WriteLine("   init, toggle_overlay, toggle_gizmo, open_preferences, save_project,");
-            Console.WriteLine("   render_image, render_animation, quick_material, quick_light, quick_camera");
-            break;
-
-        default:
-            Console.WriteLine($" - Unknown action '{actionName}'. Use 'list_ui' to view all actions.");
-            break;
-    }
+    Console.WriteLine(" - Blender launched and executing setup script.");
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"[blender.csx] Error executing {actionName}: {ex.Message}");
+    Console.WriteLine($"[blender.csx] ERROR: Failed to launch Blender - {ex.Message}");
 }
+
+Console.WriteLine(" - Automation task complete.");
