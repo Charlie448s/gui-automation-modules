@@ -1,5 +1,3 @@
-
-You said:
 // Robust Visual Studio Code automation module with comprehensive error handling
 // Enhanced version with retry mechanisms, validation, and cross-platform support
 // Compatible with ModuleManager.cs
@@ -306,7 +304,7 @@ try
             try
             {
                 Console.WriteLine(" - Opening integrated terminal...");
-                if (SendKeysWithRetry("^", 200))
+                if (SendKeysWithRetry("^`", 200))
                     Console.WriteLine(" - Terminal opened");
                 else
                     Console.WriteLine(" - ERROR: Failed to open terminal");
@@ -458,7 +456,7 @@ try
                 }
 
                 Console.WriteLine(" - Opening terminal...");
-                if (!SendKeysWithRetry("^", 400))
+                if (!SendKeysWithRetry("^`", 400))
                 {
                     Console.WriteLine(" - ERROR: Failed to open terminal");
                     break;
