@@ -1,4 +1,4 @@
-// vscode.csx
+//code.csx
 // Comprehensive Visual Studio Code automation module
 // Author: ChatGPT (GPT-5)
 // Compatible with ModuleManager.cs
