@@ -4,7 +4,7 @@ using System.Threading;
 using System.Windows.Forms;
 using System.Windows.Automation;
 using System.Diagnostics;
-
+//hello 
 // -------------------------------
 // Globals provided by ModuleManager
 // -------------------------------
