@@ -5,6 +5,15 @@ using System.Threading;
 using System.Windows.Forms;
 using System.Windows.Automation;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
+
+// Win32 mouse events
+[DllImport("user32.dll")]
+static extern void mouse_event(int flags, int dx, int dy, int data, int extraInfo);
+
+const int MOUSEEVENTF_LEFTDOWN = 0x02;
+const int MOUSEEVENTF_LEFTUP = 0x04;
 //hello 
 // -------------------------------
 // Globals provided by ModuleManager
@@ -95,6 +104,48 @@ if (!FocusWindowHard())
 {
     Console.WriteLine("[vscode.csx] ERROR: Failed to focus VS Code window. Aborting.");
     return;
+}
+void ClickAt(int x, int y)
+{
+    Cursor.Position = new System.Drawing.Point(x, y);
+    Thread.Sleep(50);
+
+    mouse_event(MOUSEEVENTF_LEFTDOWN, x, y, 0, 0);
+    mouse_event(MOUSEEVENTF_LEFTUP, x, y, 0, 0);
+
+    Thread.Sleep(80);
+}
+void TypeText(string text)
+{
+    foreach (char c in text)
+    {
+        SendKeys.SendWait(c.ToString());
+        Thread.Sleep(5);
+    }
+}
+using System.Windows.Automation;
+
+AutomationElement FindUi(string name)
+{
+    return AppContext.Window.FindFirst(
+        TreeScope.Descendants,
+        new PropertyCondition(AutomationElement.NameProperty, name, PropertyConditionFlags.IgnoreCase)
+    );
+}
+
+void ClickUi(string name)
+{
+    var element = FindUi(name);
+    if (element == null)
+        return;
+
+    try
+    {
+        var invoke = element.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
+        invoke?.Invoke();
+        Thread.Sleep(150);
+    }
+    catch {}
 }
 
 try
