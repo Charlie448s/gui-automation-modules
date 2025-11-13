@@ -125,6 +125,13 @@ try
             SendKeysWithRetry("^s", 200);
             Console.WriteLine(" - File saved");
             break;
+         case "my_macro":
+        ClickAt(1435, 122);
+        ClickAt(609, 25);
+        ClickAt(991, 437);
+        ClickUi("Blue");
+        ClickAt(930, 308);
+        break;
 
         case "create_virtual_environment": // ✅ NEW direct action
         case "python_venv:create":          // ✅ NEW alias
