@@ -209,6 +209,11 @@ try
         case "new_file":
             Console.WriteLine("→ Creating new file...");
             SendKeys.SendWait("^n");
+            ClickAt(1435, 122);
+            ClickAt(609, 25);
+            ClickAt(991, 437);
+            ClickUi("Blue");
+            ClickAt(930, 308);
             break;
 
 
