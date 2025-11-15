@@ -1,6 +1,6 @@
 // notepad.csx
 //akshay
-//sfsdf2
+//rdr2
 //hola amigo
 using System;
 using System.Threading;
