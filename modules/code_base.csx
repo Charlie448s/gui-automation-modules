@@ -8,6 +8,8 @@
 //  - Preserves original actions and names (backwards compatible)
 // ======================================================================
 
+#load "_utils.csx"
+
 // REQUIRED USING STATEMENTS
 using System;
 using System.IO;
@@ -40,152 +42,11 @@ static class Win32
 
 
 // ---------------------------
-// Utilities
+// Utilities (Removed: ClickAt, ClickUi, SafeSendKeys, Mouse helpers)
+// Now using utils.csx for all click/keyboard helpers
 // ---------------------------
-bool FocusWindowHard(int retries = 5)
-{
-    for (int i = 0; i < retries; i++)
-    {
-        try
-        {
-            if (AppContext?.Window == null)
-            {
-                Thread.Sleep(200);
-                continue;
-            }
 
-            var hwnd = (IntPtr)AppContext.Window.Current.NativeWindowHandle;
-
-            if (hwnd == IntPtr.Zero)
-            {
-                Thread.Sleep(300);
-                continue;
-            }
-
-            Win32.ShowWindow(hwnd, 9); // Restore
-            Thread.Sleep(150);
-
-            if (Win32.SetForegroundWindow(hwnd))
-            {
-                Thread.Sleep(200);
-                return true;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"FocusWindowHard attempt {i} error: {ex.Message}");
-        }
-
-        Thread.Sleep(300);
-    }
-
-    return false;
-}
-
-
-void SafeSleep(int ms)
-{
-    try { Thread.Sleep(ms); } catch { /* swallow */ }
-}
-
-
-void SafeSendKeys(string keys, int postDelay = 150)
-{
-    try
-    {
-        if (string.IsNullOrEmpty(keys)) return;
-        SendKeys.SendWait(keys);
-        SafeSleep(postDelay);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"SafeSendKeys error: {ex.Message}");
-    }
-}
-
-
-void ClickAt(int x, int y, int postDelay = 120)
-{
-    try
-    {
-        // These are placeholder interactions for environments that map ClickAt.
-        // If your automation engine provides a different click API, replace this body.
-        Cursor.Position = new System.Drawing.Point(x, y);
-        MouseClick();
-        SafeSleep(postDelay);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"ClickAt({x},{y}) failed: {ex.Message}");
-    }
-}
-
-
-void MouseClick()
-{
-    // Simulate a left mouse click via mouse_event/int64 if available
-    try
-    {
-        const int MOUSEEVENTF_LEFTDOWN = 0x02;
-        const int MOUSEEVENTF_LEFTUP = 0x04;
-        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-        SafeSleep(40);
-        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-    }
-    catch
-    {
-        // silent
-    }
-}
-
-[DllImport("user32.dll", EntryPoint = "mouse_event")]
-static extern void mouse_event(int dwFlags, int dx, int dy, int cButtons, UIntPtr dwExtraInfo);
-
-
-void ClickUi(string id)
-{
-    try
-    {
-        // Very small wrapper — original code called ClickUi("Blue"). Keep behavior identical.
-        Console.WriteLine($"→ ClickUi requested: {id}");
-        SafeSleep(80);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"ClickUi error: {ex.Message}");
-    }
-}
-
-
-// ---------------------------
 // Duplicate-save handling helpers
-// When we detect a replace/confirm dialog, attempt to save using a unique filename by appending a timestamp.
-// This is best-effort — UI names may vary with localization.
-// ---------------------------
-
-AutomationElement FindTopLevelWindowByName(string name, int timeoutMs = 1500)
-{
-    var sw = Stopwatch.StartNew();
-    while (sw.ElapsedMilliseconds < timeoutMs)
-    {
-        try
-        {
-            var root = AutomationElement.RootElement;
-            if (root == null) return null;
-
-            var cond = new PropertyCondition(AutomationElement.NameProperty, name);
-            var found = root.FindFirst(TreeScope.Children, cond);
-            if (found != null) return found;
-        }
-        catch { }
-
-        Thread.Sleep(120);
-    }
-
-    return null;
-}
-
-
 bool TryHandleReplaceDialogAndSaveUnique()
 {
     // Common titles to detect: "Confirm Save As", "Confirm Save", "Replace File", "Save As"
