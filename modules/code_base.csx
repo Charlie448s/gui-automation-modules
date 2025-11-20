@@ -58,7 +58,7 @@ bool FocusWindowHard(int retries = 3)
                 continue;
             }
 
-            Win32.ShowWindow(hwnd, 9); // Restore window
+            //Win32.ShowWindow(hwnd, 9); // Restore window
             Thread.Sleep(200);
 
             if (Win32.SetForegroundWindow(hwnd))
