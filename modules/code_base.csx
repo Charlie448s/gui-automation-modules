@@ -18,6 +18,8 @@ using System.Windows.Forms;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Automation;
+ // Required for Clipboard access
+
 
 
 
@@ -76,6 +78,15 @@ bool FocusWindowHard(int retries = 3)
     }
 
     return false;
+}
+
+string EscapeSendKeys(string s)
+{
+    return s
+        .Replace("{", "{{}")
+        .Replace("}", "{}}")
+        .Replace("(", "{(}")
+        .Replace(")", "{)}");
 }
 
 
@@ -156,33 +167,181 @@ try
         // ----------------------------------------------------------
         // PYTHON ENVIRONMENT CREATION
         // ----------------------------------------------------------
-      
-         case "duplicate_file":
- case "file:duplicate":
- case "duplicate":
+case "duplicate_file":
+case "file:duplicate":
+case "duplicate":
     Console.WriteLine("→ Duplicating current file...");
 
-    // Open Command Palette (Ctrl+Shift+P)
+    // 1. GET CURRENT FILE PATH (via VSCode Command -> clipboard)
     SendKeys.SendWait("^+p");
-    Thread.Sleep(500);
-
-    // Type Save As
-    TypeText("File: Save As");
-    Thread.Sleep(400);
-
+    Thread.Sleep(200);
+    TypeText("File: Copy Path of Active File");
+    Thread.Sleep(200);
     SendKeys.SendWait("{ENTER}");
-    Thread.Sleep(700);
+    Thread.Sleep(250);
 
-    // Generate duplicate name with timestamp
-    string newName = $"copy_{DateTime.Now:HHmmss}";
-    TypeText(newName);
+    string fullPath = GetClipboardTextWithRetries(5, 200);
+
+    if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
+    {
+        Console.WriteLine("❌ Could not get valid file path from clipboard.");
+        break;
+    }
+
+    string directory = Path.GetDirectoryName(fullPath);
+    string fileNameNoExt = Path.GetFileNameWithoutExtension(fullPath);
+    string extension = Path.GetExtension(fullPath);
+
+    // 2. GENERATE NEW FILE NAME (hello_copy_1.py)
+    int count = 1;
+    string newFullPath;
+    string newFileNameOnly;
+
+    do
+    {
+        newFileNameOnly = $"{fileNameNoExt}_copy_{count}{extension}";
+        newFullPath = Path.Combine(directory, newFileNameOnly);
+        count++;
+    } while (File.Exists(newFullPath));
+
+    // 3. FIRST & BEST OPTION: copy file directly (avoid clipboard & sendkeys)
+    try
+    {
+        File.Copy(fullPath, newFullPath);
+        Console.WriteLine($"✔ File duplicated as {newFileNameOnly} (copied directly).");
+
+        // Optional: open the new file in VS Code by asking VS Code to open it.
+        // This uses the command palette to open the file by path.
+        // If you don't want to auto-open, you can comment out the block below.
+        Thread.Sleep(200);
+        SendKeys.SendWait("^+p");
+        Thread.Sleep(200);
+        TypeText("File: Open File...");
+        Thread.Sleep(200);
+        SendKeys.SendWait("{ENTER}");
+        Thread.Sleep(400);
+        // Use a clipboard helper to paste the path into the Open dialog
+        if (SetClipboardTextWithRetries(newFullPath, 5, 200))
+        {
+            SendKeys.SendWait("^v");
+            Thread.Sleep(200);
+            SendKeys.SendWait("{ENTER}");
+        }
+
+        break; // done
+    }
+    catch (Exception ex)
+    {
+        // Could be permission / locked file / IO issue — fall back to Save As approach
+        Console.WriteLine($"⚠ Direct file copy failed ({ex.GetType().Name}): {ex.Message}");
+        Console.WriteLine("→ Falling back to Save As dialog (will attempt robust clipboard).");
+    }
+
+    // 4. FALLBACK: use Save As dialog + robust clipboard helper (STA + retries)
+    bool clipboardSet = SetClipboardTextWithRetries(newFullPath, 8, 200);
+
+    if (!clipboardSet)
+    {
+        Console.WriteLine("❌ Failed to set clipboard after retries. Cannot complete Save As fallback.");
+        break;
+    }
+
+    // Open Save As in VS Code
+    SendKeys.SendWait("^+p");
     Thread.Sleep(300);
 
+    TypeText("File: Save As");
+    Thread.Sleep(300);
     SendKeys.SendWait("{ENTER}");
-    Thread.Sleep(400);
+    Thread.Sleep(900); // give dialog time
 
-    Console.WriteLine($"✔ File duplicated as {newName}");
+    // Paste the path
+    SendKeys.SendWait("^v");
+    Thread.Sleep(300);
+    SendKeys.SendWait("{ENTER}");
+    Thread.Sleep(500);
+
+    Console.WriteLine($"✔ File duplicated as {newFileNameOnly} (via Save As fallback).");
     break;
+
+// ----------------- Helper functions -----------------
+
+// Attempts to get clipboard text with retries
+string GetClipboardTextWithRetries(int maxAttempts, int delayMs)
+{
+    for (int i = 0; i < maxAttempts; i++)
+    {
+        try
+        {
+            string text = GetClipboardTextSTA();
+            if (!string.IsNullOrEmpty(text)) return text;
+        }
+        catch { /* ignore and retry */ }
+
+        Thread.Sleep(delayMs);
+    }
+    return null;
+}
+
+// Attempts to set clipboard text with retries
+bool SetClipboardTextWithRetries(string text, int maxAttempts, int delayMs)
+{
+    for (int i = 0; i < maxAttempts; i++)
+    {
+        try
+        {
+            SetClipboardTextSTA(text);
+            // verify
+            string verify = GetClipboardTextSTA();
+            if (verify == text) return true;
+        }
+        catch { /* ignore and retry */ }
+
+        Thread.Sleep(delayMs);
+    }
+    return false;
+}
+
+// STA-thread wrapper to get clipboard text (avoids "Clipboard operation did not succeed" in many cases)
+string GetClipboardTextSTA()
+{
+    string result = null;
+    Thread thread = new Thread(() =>
+    {
+        try
+        {
+            if (Clipboard.ContainsText())
+                result = Clipboard.GetText();
+        }
+        catch { /* access denied or in use */ }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    thread.Join(1000); // wait up to 1s
+    return result;
+}
+
+// STA-thread wrapper to set clipboard text
+void SetClipboardTextSTA(string text)
+{
+    Thread thread = new Thread(() =>
+    {
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch
+        {
+            // Let outer retry logic handle failures
+            throw;
+        }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    thread.Join(1000);
+}
+
+
 
 case "create_virtual_environment":
         case "python_venv:create":
@@ -238,6 +397,42 @@ case "create_virtual_environment":
         // ----------------------------------------------------------
         // PYTHON ENV ACTIVATION
         // ----------------------------------------------------------
+case "open_gitbash":
+case "terminal:gitbash":
+case "gitbash":
+{
+    Console.WriteLine("→ Opening Git Bash terminal...");
+
+    // 1. Open Command Palette
+    SendKeys.SendWait("^+p");
+    Thread.Sleep(200);
+
+    // 2. Use the UNIQUE command that ALWAYS opens the profile picker
+    TypeText("Terminal: Select Default Profile");
+    Thread.Sleep(300);
+
+    SendKeys.SendWait("{ENTER}");
+    Thread.Sleep(700); // time for the profile list to open
+
+    // 3. Select Git Bash
+    TypeText("Git Bash");
+    Thread.Sleep(300);
+
+    SendKeys.SendWait("{ENTER}");
+
+    // 4. NOW create a new terminal using that default profile
+    SendKeys.SendWait("^+p");
+    Thread.Sleep(200);
+
+    TypeText("Terminal: Create New Terminal");
+    Thread.Sleep(200);
+
+    SendKeys.SendWait("{ENTER}");
+
+    Console.WriteLine("✔ Git Bash opened.");
+    break;
+}
+
 
 
 
@@ -256,3 +451,5 @@ catch (Exception ex)
     Console.WriteLine($"CRITICAL ERROR: {ex.Message}");
 }
 
+
+ 
