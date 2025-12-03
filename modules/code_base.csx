@@ -156,22 +156,7 @@ try
         // ----------------------------------------------------------
         // PYTHON ENVIRONMENT CREATION
         // ----------------------------------------------------------
-        case "create_virtual_environment":
-        case "python_venv:create":
-        case "venv:create":
-            Console.WriteLine("→ Creating Python virtual environment...");
-
-            SendKeys.SendWait("^`");      // open terminal
-            Thread.Sleep(800);
-
-            SendKeys.SendWait("cls{ENTER}");
-            Thread.Sleep(300);
-
-            SendKeys.SendWait("python -m venv .venv{ENTER}");
-            Thread.Sleep(3500);
-
-            Console.WriteLine("✔ Attempted .venv creation. Verify folder manually.");
-            break;
+      
          case "duplicate_file":
  case "file:duplicate":
  case "duplicate":
@@ -199,6 +184,28 @@ try
     Console.WriteLine($"✔ File duplicated as {newName}");
     break;
 
+case "create_virtual_environment":
+        case "python_venv:create":
+        case "venv:create":
+            Console.WriteLine("→ Creating Python virtual environment...");
+
+            // FIX: Use Command Palette to ensure a NEW terminal is opened
+            // (Prevents toggling closed if already open)
+            SendKeys.SendWait("^+p");       // Ctrl + Shift + P
+            Thread.Sleep(400);
+            
+            // We use SendKeys to type the command palette search
+            SendKeys.SendWait("Terminal: Create New Terminal"); 
+            Thread.Sleep(300);
+            SendKeys.SendWait("{ENTER}");
+            Thread.Sleep(1500);             // Wait for terminal to initialize
+
+            // Now send the creation command
+            SendKeys.SendWait("python -m venv .venv{ENTER}");
+            Thread.Sleep(3500);             // Wait for venv creation to finish
+
+            Console.WriteLine("✔ Attempted .venv creation.");
+            break;
 
         // ----------------------------------------------------------
         // PYTHON ENV ACTIVATION
@@ -208,8 +215,15 @@ try
         case "venv:activate":
             Console.WriteLine("→ Activating Python environment...");
 
-            SendKeys.SendWait("^`");
-            Thread.Sleep(600);
+            // FIX: Use Command Palette to FOCUS the existing terminal
+            // (Prevents closing it if it's already open)
+            SendKeys.SendWait("^+p");       // Ctrl + Shift + P
+            Thread.Sleep(400);
+            
+            SendKeys.SendWait("Terminal: Focus Terminal");
+            Thread.Sleep(300);
+            SendKeys.SendWait("{ENTER}");
+            Thread.Sleep(800);              // Wait for focus switch
 
             string activateCmd =
                 Environment.OSVersion.Platform == PlatformID.Win32NT
@@ -221,6 +235,10 @@ try
 
             Console.WriteLine("✔ Activation command sent.");
             break;
+        // ----------------------------------------------------------
+        // PYTHON ENV ACTIVATION
+        // ----------------------------------------------------------
+
 
 
         // ----------------------------------------------------------
